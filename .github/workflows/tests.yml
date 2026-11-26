@@ -76,26 +76,31 @@ jobs:
 
       - name: Run integration tests
         run: |
+          repo_root="$(pwd)"
+          proto_gen_dir="/tmp/proto_gen"
+          mkdir -p "$proto_gen_dir"
+
+          pb2_dir="$(find "$repo_root" -name 'workspace_pb2.py' -exec dirname {} \; 2>/dev/null | head -n 1)"
+          if [ -z "$pb2_dir" ]; then
+            proto_file="$(find "$repo_root" -name '*.proto' 2>/dev/null | head -n 1)"
+            if [ -n "$proto_file" ]; then
+              proto_dir="$(dirname "$proto_file")"
+              python -m grpc_tools.protoc -I"$proto_dir" --python_out="$proto_gen_dir" --grpc_python_out="$proto_gen_dir" "$proto_file"
+              pb2_dir="$proto_gen_dir"
+            fi
+          fi
+
           for svc in auth-service notification-service workspace-service task-service; do
             if [ -d "services/$svc/tests/integration" ]; then
               db_name="${svc%-service}_db"
               echo "=== Integration tests: $svc ($db_name) ==="
               (
                 cd "services/$svc"
-                pb2_dir="$(find . -name 'workspace_pb2.py' -printf '%h\n' 2>/dev/null | head -n 1)"
-                if [ -z "$pb2_dir" ]; then
-                  proto_file="$(find . -name '*.proto' 2>/dev/null | head -n 1)"
-                  if [ -n "$proto_file" ]; then
-                    proto_dir="$(dirname "$proto_file")"
-                    python -m grpc_tools.protoc -I"$proto_dir" --python_out="$proto_dir" --grpc_python_out="$proto_dir" "$proto_file"
-                    pb2_dir="$proto_dir"
-                  fi
-                fi
-                extra_py_path=""
+                py_path="."
                 if [ -n "$pb2_dir" ]; then
-                  extra_py_path=":$(cd "$pb2_dir" && pwd)"
+                  py_path=".:$pb2_dir"
                 fi
-                PYTHONPATH=".${extra_py_path}" TEST_DATABASE_URL="postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/$db_name" \
+                PYTHONPATH="$py_path" TEST_DATABASE_URL="postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/$db_name" \
                   python -m pytest tests/integration -v -o asyncio_mode=auto
               )
             fi
