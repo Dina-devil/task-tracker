@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package workspace;
+
+service WorkspaceService {
+  rpc CheckProjectAccess (ProjectAccessRequest) returns (ProjectAccessResponse);
+}
+
+message ProjectAccessRequest {
+  string project_id = 1;
+  string user_id = 2;
+}
+
+message ProjectAccessResponse {
+  bool has_access = 1;
+  string organization_id = 2;
+}
